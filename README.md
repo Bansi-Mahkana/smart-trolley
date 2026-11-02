@@ -24,7 +24,8 @@ cd smart-trolley
 
 ### 2. Set Up Python Environment
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt # for windows
+pip3 install -r requirements.txt # for mac
 ```
 
 ### 3. Configure Settings
@@ -34,21 +35,12 @@ Open `config.py` to adjust settings if needed:
 
 ### 4. Run the Application
 ```bash
-python app.py
+python app.py # for windows
+python3 app.py # for mac
 ```
 
 ### 5. Access the Web Interface
-- On the host machine: `http://localhost:5000`
-- From another device on the same network: `http://<ip-address>:5000`
-
----
-
-## Admin Portal
-
-- **URL:** `http://localhost:5000/login`
-- **Option:** Check "Login as Administrator"
-- **Default Username:** `admin`
-- **Default Password:** `admin123`
+- On the host machine: `http://localhost:5001`
 
 ---
 
@@ -56,5 +48,4 @@ python app.py
 
 - **Backend:** Python 3, Flask, SQLite3, PySerial
 - **Frontend:** HTML5, CSS3, JavaScript (Fetch API)
-- **Hardware:** Raspberry Pi, Arduino Uno, MFRC522 RFID, HX711 Load Cell
 - **Communication:** USB Serial (JSON at 9600 baud), SMTP (TLS)
