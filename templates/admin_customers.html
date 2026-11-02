@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Customers - Smart Trolley{% endblock %}
+
+{% block content %}
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="top-bar-title">
+    <h1>Customer Management</h1>
+    <div class="subtitle">View and audit registered shoppers</div>
+  </div>
+  <div class="user-info">
+    <div class="user-badge">
+      <span><i class="bi bi-people"></i></span>
+      <span>Customer Accounts</span>
+    </div>
+  </div>
+</div>
+
+<!-- Customers Table Container -->
+<div class="table-container">
+  <div class="table-header">
+    <h3>
+      <span><i class="bi bi-people"></i> Registered Customers</span>
+      <span class="badge badge-info">{{ customers|length if customers else 0 }}</span>
+    </h3>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 60px;">#</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Phone</th>
+          <th>Registered On</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if customers and customers|length > 0 %}
+          {% for customer in customers %}
+            <tr>
+              <td><strong>{{ loop.index }}</strong></td>
+              <td>
+                <div style="font-weight: 600; color: var(--text);">{{ customer.name }}</div>
+              </td>
+              <td>
+                <a href="mailto:{{ customer.email }}" style="color: var(--primary); text-decoration: none;">
+                  {{ customer.email }}
+                </a>
+              </td>
+              <td>
+                {% if customer.phone %}
+                  <span>{{ customer.phone }}</span>
+                {% else %}
+                  <span style="color: var(--text-light); font-style: italic;">N/A</span>
+                {% endif %}
+              </td>
+              <td style="color: var(--text-light);">
+                {{ customer.created_at }}
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="5" class="empty-table-message">
+              No registered customers found.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}Transactions - Smart Trolley{% endblock %}
+
+{% block content %}
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="top-bar-title">
+    <h1>Transaction History</h1>
+    <div class="subtitle">View and audit all completed shopping transactions</div>
+  </div>
+  <div class="user-info">
+    <div class="user-badge">
+      <span><i class="bi bi-receipt"></i></span>
+      <span>Billing & Orders</span>
+    </div>
+  </div>
+</div>
+
+<!-- Transactions Table Container -->
+<div class="table-container">
+  <div class="table-header">
+    <h3>
+      <span>All Transactions</span>
+      <span class="badge badge-info">{{ transactions|length if transactions else 0 }}</span>
+    </h3>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 50px;">#</th>
+          <th>Transaction ID</th>
+          <th>Customer</th>
+          <th>Date</th>
+          <th>Total (₹)</th>
+          <th>Payment Method</th>
+          <th>Status</th>
+          <th style="text-align: center; width: 100px;">Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if transactions and transactions|length > 0 %}
+          {% for transaction in transactions %}
+            <tr>
+              <td><strong>{{ loop.index }}</strong></td>
+              <td><code>#{{ transaction.id }}</code></td>
+              <td>
+                <strong>{{ transaction.customer_name if transaction.customer_name else 'Guest / User #' ~ transaction.customer_id }}</strong>
+              </td>
+              <td style="color: var(--text-light);">{{ transaction.created_at }}</td>
+              <td><strong>₹{{ '%.2f'|format(transaction.total_amount) }}</strong></td>
+              <td>
+                <span class="badge badge-info">{{ transaction.payment_method }}</span>
+              </td>
+              <td>
+                <span class="badge badge-success">{{ transaction.status|capitalize }}</span>
+              </td>
+              <td style="text-align: center;">
+                <button 
+                  type="button" 
+                  class="btn btn-sm btn-outline view-transaction-btn"
+                  data-tx-id="{{ transaction.id }}"
+                  data-tx-customer="{{ transaction.customer_name if transaction.customer_name else 'User #' ~ transaction.customer_id }}"
+                  data-tx-date="{{ transaction.created_at }}"
+                  data-tx-total="{{ '%.2f'|format(transaction.total_amount) }}"
+                  data-tx-method="{{ transaction.payment_method }}"
+                  title="View Itemized Receipt"
+                >
+                  <i class="bi bi-eye"></i> View
+                </button>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="8" class="empty-table-message">
+              No transactions recorded yet.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Transaction Details Modal -->
+<div class="modal-overlay hidden" id="details-modal">
+  <div class="modal" style="max-width: 650px; width: 95%;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 20px;">
+      <h2 style="margin: 0; font-size: 1.35rem; color: var(--text);">Transaction Details</h2>
+      <button 
+        type="button" 
+        class="flash-close" 
+        onclick="closeDetailsModal()" 
+        style="font-size: 1.4rem; cursor: pointer;"
+        aria-label="Close modal"
+      >&times;</button>
+    </div>
+
+    <!-- Populated by JavaScript -->
+    <div id="transaction-details">
+      <p style="text-align: center; color: var(--text-light); padding: 24px;">Loading transaction details...</p>
+    </div>
+
+    <div class="modal-actions" style="margin-top: 20px;">
+      <button type="button" class="btn btn-primary" onclick="closeDetailsModal()">Close</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Open Transaction Details Modal and fetch itemized records
+  function viewTransaction(id, customerName, createdAt, totalAmount, paymentMethod) {
+    const modal = document.getElementById('details-modal');
+    const detailsContainer = document.getElementById('transaction-details');
+
+    if (!modal || !detailsContainer) return;
+
+    modal.classList.remove('hidden');
+    detailsContainer.innerHTML = `
+      <div style="text-align: center; padding: 28px; color: var(--text-light);">
+        <span><i class="bi bi-hourglass-split"></i> Fetching transaction line items...</span>
+      </div>
+    `;
+
+    fetch(`/admin/transactions/${id}/items`)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        // Handle varying response formats: array, or {items: [...]}, or {items: [...], transaction: {...}}
+        let items = [];
+        let tx = null;
+
+        if (Array.isArray(data)) {
+          items = data;
+        } else if (data && Array.isArray(data.items)) {
+          items = data.items;
+          tx = data.transaction || null;
+        } else if (data && typeof data === 'object') {
+          items = data.items || [];
+          tx = data.transaction || data;
+        }
+
+        const displayCust = (tx && (tx.customer_name || tx.name)) || customerName || 'N/A';
+        const displayDate = (tx && tx.created_at) || createdAt || 'N/A';
+        const displayTotal = (tx && tx.total_amount !== undefined) 
+          ? parseFloat(tx.total_amount).toFixed(2) 
+          : (totalAmount || '0.00');
+        const displayMethod = (tx && tx.payment_method) || paymentMethod || 'Cash';
+
+        let itemsRowsHtml = '';
+        let calculatedTotal = 0;
+
+        if (items.length > 0) {
+          items.forEach((item, index) => {
+            const name = item.product_name || item.name || 'Unknown Item';
+            const qty = parseInt(item.quantity || item.qty || 1, 10);
+            const price = parseFloat(item.unit_price || item.price || 0);
+            const subtotal = parseFloat(item.subtotal || (qty * price));
+            calculatedTotal += subtotal;
+
+            itemsRowsHtml += `
+              <tr>
+                <td style="padding: 10px 12px;">${index + 1}</td>
+                <td style="padding: 10px 12px;"><strong>${escapeHtml(name)}</strong></td>
+                <td style="padding: 10px 12px; text-align: center;">${qty}</td>
+                <td style="padding: 10px 12px; text-align: right;">₹${price.toFixed(2)}</td>
+                <td style="padding: 10px 12px; text-align: right; font-weight: 600;">₹${subtotal.toFixed(2)}</td>
+              </tr>
+            `;
+          });
+        } else {
+          itemsRowsHtml = `
+            <tr>
+              <td colspan="5" class="empty-table-message" style="padding: 20px;">
+                No individual item records found for this transaction.
+              </td>
+            </tr>
+          `;
+        }
+
+        const finalTotal = (parseFloat(displayTotal) > 0) ? displayTotal : calculatedTotal.toFixed(2);
+
+        detailsContainer.innerHTML = `
+          <!-- Meta Header Details -->
+          <div style="background-color: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 0.92rem;">
+              <div><strong style="color: var(--text-light);">Transaction ID:</strong> <code>#${id}</code></div>
+              <div><strong style="color: var(--text-light);">Customer:</strong> ${escapeHtml(displayCust)}</div>
+              <div><strong style="color: var(--text-light);">Date:</strong> ${escapeHtml(formatDisplayDate(displayDate))}</div>
+              <div><strong style="color: var(--text-light);">Payment:</strong> <span class="badge badge-info">${escapeHtml(displayMethod)}</span></div>
+            </div>
+          </div>
+
+          <!-- Items Table -->
+          <div class="table-responsive" style="border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 16px;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="background-color: var(--primary); color: var(--white);">
+                  <th style="padding: 10px 12px; font-size: 0.85rem; width: 40px;">#</th>
+                  <th style="padding: 10px 12px; font-size: 0.85rem; text-align: left;">Product</th>
+                  <th style="padding: 10px 12px; font-size: 0.85rem; text-align: center; width: 80px;">Qty</th>
+                  <th style="padding: 10px 12px; font-size: 0.85rem; text-align: right; width: 100px;">Price</th>
+                  <th style="padding: 10px 12px; font-size: 0.85rem; text-align: right; width: 100px;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsRowsHtml}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Total Calculation -->
+          <div style="background-color: var(--primary-light); padding: 14px 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 1rem; font-weight: 600; color: var(--text);">Total Amount Paid:</span>
+            <span style="font-size: 1.4rem; font-weight: 700; color: var(--primary);">₹${finalTotal}</span>
+          </div>
+        `;
+      })
+      .catch(err => {
+        console.error('Error fetching transaction items:', err);
+        detailsContainer.innerHTML = `
+          <div style="background-color: #FFEBEE; border-left: 4px solid var(--danger); padding: 16px; border-radius: 6px; color: #C62828;">
+            <strong>Error loading transaction:</strong> ${escapeHtml(err.message || 'Unable to fetch transaction items.')}
+          </div>
+        `;
+      });
+  }
+
+  // Close Transaction Details Modal
+  function closeDetailsModal() {
+    const modal = document.getElementById('details-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+  }
+
+  function formatDisplayDate(dateStr) {
+    if (!dateStr || dateStr === 'N/A') return 'N/A';
+    try {
+      const match = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+      if (match) {
+        const [_, y, m, d, hh, mm, ss] = match;
+        const hourNum = parseInt(hh, 10);
+        const ampm = hourNum >= 12 ? 'PM' : 'AM';
+        const hour12 = hourNum % 12 || 12;
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const monthName = months[parseInt(m, 10) - 1] || m;
+        return `${d} ${monthName} ${y}, ${String(hour12).padStart(2, '0')}:${mm}:${ss} ${ampm}`;
+      }
+    } catch (e) {}
+    return dateStr;
+  }
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[&<>"']/g, function(m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+    });
+  }
+
+  // Close modal when user clicks outside modal card
+  document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('details-modal');
+    if (modal) {
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+          closeDetailsModal();
+        }
+      });
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeDetailsModal();
+      }
+    });
+
+    // Attach click handlers to all View buttons using data attributes
+    document.querySelectorAll('.view-transaction-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var id = parseInt(this.getAttribute('data-tx-id'), 10);
+        var customerName = this.getAttribute('data-tx-customer') || 'N/A';
+        var createdAt = this.getAttribute('data-tx-date') || 'N/A';
+        var totalAmount = this.getAttribute('data-tx-total') || '0.00';
+        var paymentMethod = this.getAttribute('data-tx-method') || 'Cash';
+        viewTransaction(id, customerName, createdAt, totalAmount, paymentMethod);
+      });
+    });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Smart Trolley{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <!-- Mobile Menu Toggle Button -->
+  <button class="menu-toggle" id="menu-toggle" aria-label="Toggle navigation menu">
+    <i class="bi bi-list"></i>
+  </button>
+
+  <!-- Mobile Overlay -->
+  <div class="overlay" id="sidebar-overlay"></div>
+
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar" id="sidebar">
+    <a href="{{ '/admin' if session.get('is_admin') else '/dashboard' if session.get('customer_id') else '/' }}" class="logo">
+      <i class="bi bi-cart3"></i>
+      <span>Smart Trolley</span>
+    </a>
+
+    <ul class="nav-menu">
+      {% if session.get('customer_id') %}
+        <li>
+          <a href="/dashboard" class="{{ 'active' if request.path == '/dashboard' else '' }}">
+            <span class="nav-icon"><i class="bi bi-speedometer2"></i></span>
+            <span>Dashboard</span>
+          </a>
+        </li>
+        <li>
+          <a href="/cart" class="{{ 'active' if request.path == '/cart' else '' }}">
+            <span class="nav-icon"><i class="bi bi-cart-check"></i></span>
+            <span>Cart</span>
+          </a>
+        </li>
+        <li>
+          <a href="/logout" onclick="confirmLogout(event)">
+            <span class="nav-icon"><i class="bi bi-box-arrow-right"></i></span>
+            <span>Logout</span>
+          </a>
+        </li>
+      {% elif session.get('is_admin') %}
+        <li>
+          <a href="/admin" class="{{ 'active' if request.path == '/admin' else '' }}">
+            <span class="nav-icon"><i class="bi bi-speedometer2"></i></span>
+            <span>Dashboard</span>
+          </a>
+        </li>
+        <li>
+          <a href="/admin/products" class="{{ 'active' if request.path == '/admin/products' else '' }}">
+            <span class="nav-icon"><i class="bi bi-box-seam"></i></span>
+            <span>Products</span>
+          </a>
+        </li>
+        <li>
+          <a href="/admin/customers" class="{{ 'active' if request.path == '/admin/customers' else '' }}">
+            <span class="nav-icon"><i class="bi bi-people"></i></span>
+            <span>Customers</span>
+          </a>
+        </li>
+        <li>
+          <a href="/admin/transactions" class="{{ 'active' if request.path == '/admin/transactions' else '' }}">
+            <span class="nav-icon"><i class="bi bi-receipt"></i></span>
+            <span>Transactions</span>
+          </a>
+        </li>
+        <li>
+          <a href="/logout" onclick="confirmLogout(event)">
+            <span class="nav-icon"><i class="bi bi-box-arrow-right"></i></span>
+            <span>Logout</span>
+          </a>
+        </li>
+      {% else %}
+        <li>
+          <a href="/login" class="{{ 'active' if request.path == '/login' else '' }}">
+            <span class="nav-icon"><i class="bi bi-key"></i></span>
+            <span>Login</span>
+          </a>
+        </li>
+        <li>
+          <a href="/register" class="{{ 'active' if request.path == '/register' else '' }}">
+            <span class="nav-icon"><i class="bi bi-person-plus"></i></span>
+            <span>Register</span>
+          </a>
+        </li>
+      {% endif %}
+    </ul>
+
+    <div class="sidebar-footer">
+      <p>&copy; 2026 Smart Trolley IoT</p>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+    <!-- Flash Messages Container -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages" id="flash-messages-container">
+          {% for category, message in messages %}
+            <div class="flash-msg flash-{{ 'danger' if category == 'error' else category }}">
+              <span>{{ message }}</span>
+              <button type="button" class="flash-close" onclick="this.parentElement.remove();">&times;</button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Toast Notification Container for Dynamic Alerts -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Logout Confirmation Modal -->
+  <div class="modal-overlay hidden" id="logout-confirm-modal">
+    <div class="modal" style="max-width: 420px; text-align: center;">
+      <div style="font-size: 3rem; color: var(--warning); margin-bottom: 12px; line-height: 1;">
+        <i class="bi bi-box-arrow-right"></i>
+      </div>
+      <h2 style="font-size: 1.35rem; margin-bottom: 8px;">Confirm Logout</h2>
+      <p style="color: var(--text-light); margin-bottom: 24px; font-size: 0.95rem;">
+        Are you sure you want to log out of your session?
+      </p>
+      <div class="modal-actions" style="justify-content: center; gap: 14px;">
+        <button type="button" class="btn btn-outline" onclick="closeLogoutModal()">
+          Cancel
+        </button>
+        <a href="/logout" class="btn btn-danger" id="confirm-logout-btn">
+          <i class="bi bi-box-arrow-right"></i>
+          <span>Yes, Logout</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Core JavaScript -->
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script>
+    // Logout confirmation modal handlers
+    function confirmLogout(event) {
+      if (event) event.preventDefault();
+      const modal = document.getElementById('logout-confirm-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+      } else if (confirm('Are you sure you want to log out?')) {
+        window.location.href = '/logout';
+      }
+    }
+
+    function closeLogoutModal() {
+      const modal = document.getElementById('logout-confirm-modal');
+      if (modal) {
+        modal.classList.add('hidden');
+      }
+    }
+
+    window.confirmLogout = confirmLogout;
+    window.closeLogoutModal = closeLogoutModal;
+
+    // Inline fallback for sidebar mobile toggle
+    document.addEventListener('DOMContentLoaded', function() {
+      const toggleBtn = document.getElementById('menu-toggle');
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+
+      if (toggleBtn && sidebar && overlay) {
+        function toggleSidebar() {
+          sidebar.classList.toggle('active');
+          overlay.classList.toggle('active');
+        }
+
+        toggleBtn.addEventListener('click', toggleSidebar);
+        overlay.addEventListener('click', toggleSidebar);
+      }
+
+      // Close logout modal when clicking outside
+      const logoutModal = document.getElementById('logout-confirm-modal');
+      if (logoutModal) {
+        logoutModal.addEventListener('click', function(e) {
+          if (e.target === logoutModal) {
+            closeLogoutModal();
+          }
+        });
+      }
+
+      // Close modal on Escape key press
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          closeLogoutModal();
+        }
+      });
+
+      // Auto dismiss flash messages after 5 seconds
+      const flashMsgs = document.querySelectorAll('.flash-msg');
+      flashMsgs.forEach(function(msg) {
+        setTimeout(function() {
+          msg.style.opacity = '0';
+          msg.style.transition = 'opacity 0.5s ease';
+          setTimeout(function() { msg.remove(); }, 500);
+        }, 5000);
+      });
+    });
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

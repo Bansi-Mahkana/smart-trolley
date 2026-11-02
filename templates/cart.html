@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Cart - Smart Trolley{% endblock %}
+
+{% block content %}
+<!-- Top Bar -->
+<div class="top-bar" id="cart-page">
+  <div class="top-bar-title">
+    <h1>Shopping Cart</h1>
+    <div class="subtitle">View and manage your items</div>
+  </div>
+  <div class="user-info">
+    <div class="user-badge">
+      <span><i class="bi bi-cart3"></i></span>
+      <span id="cart-item-badge-top">0 items</span>
+    </div>
+  </div>
+</div>
+
+<!-- Cart Table Container -->
+<div class="table-container">
+  <div class="table-header">
+    <h3>
+      <span><i class="bi bi-bag-check"></i> Cart Items</span>
+      <span class="badge badge-info" id="cart-item-count">0 items</span>
+    </h3>
+    <button type="button" class="btn btn-outline btn-sm" onclick="fetchCartData()">
+      <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 50px;">#</th>
+          <th>Product</th>
+          <th>Unit Price</th>
+          <th style="text-align: center; width: 120px;">Quantity</th>
+          <th>Subtotal</th>
+          <th style="text-align: center; width: 100px;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="cart-items">
+        <tr id="empty-cart-row">
+          <td colspan="6" class="empty-table-message">
+            Your cart is empty. Scan products to add them to your trolley.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Cart Total Section -->
+<div class="cart-total">
+  <span>Total Payable Amount:</span>
+  <span class="amount">₹<span id="cart-total">0.00</span></span>
+</div>
+
+<!-- Cart Action Buttons -->
+<div class="cart-actions">
+  <a href="/dashboard" class="btn btn-outline">
+    <i class="bi bi-arrow-left"></i> Continue Shopping
+  </a>
+  <button type="button" class="btn btn-primary" id="checkout-btn" onclick="openPaymentModal()" disabled>
+    <i class="bi bi-credit-card-2-front"></i> Proceed to Checkout
+  </button>
+</div>
+
+<!-- Payment Modal -->
+<div class="modal-overlay hidden" id="payment-modal">
+  <div class="modal">
+    <h2>Complete Payment</h2>
+    <div class="modal-body">
+      <p style="font-size: 1.15rem; margin-bottom: 12px;">
+        Total Payable: <strong style="color: var(--primary);">₹<span id="modal-pay-amount">0.00</span></strong>
+      </p>
+      <div class="payment-method-box">
+        <span style="font-size: 1.4rem; color: var(--primary);"><i class="bi bi-cash-stack"></i></span>
+        <div>
+          <div>Payment Method: <strong>Cash</strong></div>
+          <small style="color: var(--text-light); font-weight: normal;">Pay at the store exit counter or kiosk</small>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" id="cancel-pay-btn" onclick="closePaymentModal()">Cancel</button>
+      <button type="button" class="btn btn-success" id="pay-btn" onclick="processCheckout()">
+        <i class="bi bi-check2-circle"></i> Pay with Cash
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Success Modal -->
+<div class="modal-overlay hidden" id="success-modal">
+  <div class="modal" style="text-align: center;">
+    <div style="font-size: 4.5rem; margin-bottom: 12px; line-height: 1; color: var(--success);"><i class="bi bi-check-circle-fill"></i></div>
+    <h2>Payment Successful!</h2>
+    <p id="success-email-msg" style="color: var(--text-light); margin-bottom: 16px;">Receipt has been sent to your registered email address.</p>
+    
+    <div class="payment-method-box" style="justify-content: center; margin-bottom: 24px;">
+      <span style="font-size: 0.95rem;">Transaction ID:</span>
+      <strong id="success-tx-id" style="color: var(--primary); letter-spacing: 0.5px;">#TXN-00000</strong>
+    </div>
+
+    <div class="modal-actions" style="justify-content: center;">
+      <a href="/dashboard" class="btn btn-primary">Back to Dashboard</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Smart Trolley{% endblock %}
+
+{% block content %}
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="top-bar-title">
+    <h1>Admin Dashboard</h1>
+    <div class="subtitle">Manage your store and monitor IoT shopping activity</div>
+  </div>
+  <div class="user-info">
+    <div class="user-badge">
+      <span><i class="bi bi-shield-lock"></i></span>
+      <span>Store Admin</span>
+    </div>
+  </div>
+</div>
+
+<!-- Dashboard Summary Cards (4 Columns) -->
+<div class="dashboard-cards">
+  <!-- Total Products Card -->
+  <div class="card">
+    <div class="card-icon"><i class="bi bi-box-seam"></i></div>
+    <div class="card-content">
+      <div class="card-value">{{ stats.total_products }}</div>
+      <div class="card-label">Total Products</div>
+    </div>
+  </div>
+
+  <!-- Total Customers Card -->
+  <div class="card">
+    <div class="card-icon"><i class="bi bi-people"></i></div>
+    <div class="card-content">
+      <div class="card-value">{{ stats.total_customers }}</div>
+      <div class="card-label">Total Customers</div>
+    </div>
+  </div>
+
+  <!-- Total Transactions Card -->
+  <div class="card">
+    <div class="card-icon"><i class="bi bi-receipt"></i></div>
+    <div class="card-content">
+      <div class="card-value">{{ stats.total_transactions }}</div>
+      <div class="card-label">Total Transactions</div>
+    </div>
+  </div>
+
+  <!-- Total Revenue Card -->
+  <div class="card">
+    <div class="card-icon"><i class="bi bi-currency-rupee"></i></div>
+    <div class="card-content">
+      <div class="card-value">₹{{ '%.2f'|format(stats.total_revenue) }}</div>
+      <div class="card-label">Total Revenue</div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Actions Section -->
+<div class="table-container" style="padding: 24px;">
+  <div class="table-header" style="padding: 0 0 20px 0; margin-bottom: 20px;">
+    <h3>
+      <span><i class="bi bi-lightning-charge"></i> Quick Actions</span>
+    </h3>
+  </div>
+
+  <div class="dashboard-cards" style="margin-bottom: 0;">
+    <!-- Manage Products Action Card -->
+    <a href="/admin/products" class="card" style="text-decoration: none; border: 1px solid var(--border);">
+      <div class="card-icon" style="background-color: var(--primary-light); color: var(--primary);"><i class="bi bi-box-seam"></i></div>
+      <div class="card-content">
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 4px;">
+          Manage Products
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-light); margin: 0; line-height: 1.4;">
+          Add, edit, or remove catalog items, RFID tags, prices, and expected weights.
+        </p>
+      </div>
+    </a>
+
+    <!-- View Customers Action Card -->
+    <a href="/admin/customers" class="card" style="text-decoration: none; border: 1px solid var(--border);">
+      <div class="card-icon" style="background-color: #E3F2FD; color: #1565C0;"><i class="bi bi-people"></i></div>
+      <div class="card-content">
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 4px;">
+          View Customers
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-light); margin: 0; line-height: 1.4;">
+          View registered shoppers, registered emails, contact details, and account creation dates.
+        </p>
+      </div>
+    </a>
+
+    <!-- View Transactions Action Card -->
+    <a href="/admin/transactions" class="card" style="text-decoration: none; border: 1px solid var(--border);">
+      <div class="card-icon" style="background-color: #E8F5E9; color: #2E7D32;"><i class="bi bi-receipt"></i></div>
+      <div class="card-content">
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 4px;">
+          View Transactions
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-light); margin: 0; line-height: 1.4;">
+          Inspect sales history, transaction receipts, payment methods, and line item details.
+        </p>
+      </div>
+    </a>
+  </div>
+</div>
+{% endblock %}

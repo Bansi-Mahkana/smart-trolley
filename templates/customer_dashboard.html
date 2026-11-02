@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Smart Trolley{% endblock %}
+
+{% block content %}
+<!-- Top Bar -->
+<div class="top-bar" id="dashboard-page">
+  <div class="top-bar-title">
+    <h1>Welcome, {{ customer.name if customer and customer.name else session.get('customer_name', 'Shopper') }}!</h1>
+    <div class="subtitle">Real-time IoT Shopping Session Monitoring</div>
+  </div>
+  <div class="user-info" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+    {% if customer and customer.email %}
+    <div class="user-badge" style="background: var(--white); border: 1px solid var(--border); padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; color: var(--text);">
+      <span><i class="bi bi-envelope"></i></span>
+      <span>{{ customer.email }}</span>
+    </div>
+    {% endif %}
+    <div class="user-badge">
+      <span><i class="bi bi-cart3"></i></span>
+      <span>Trolley #{{ session.get('trolley_id', 'TR-01') }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- Demo Mode Banner & Controls -->
+{% if demo_mode %}
+  <div class="demo-banner">
+    <span class="demo-icon"><i class="bi bi-gear-wide-connected"></i></span>
+    <span>Demo Mode Active — Simulating hardware data</span>
+  </div>
+
+  <div class="demo-panel">
+    <h3><i class="bi bi-sliders"></i> Demo Controls</h3>
+    <div class="demo-controls">
+      <div class="demo-control-group">
+        <select id="demo-product-select" aria-label="Select demo product">
+          <option value="">-- Select Product to Scan --</option>
+          {% if products %}
+            {% for product in products %}
+              <option value="{{ product.rfid_uid }}" data-weight="{{ product.weight }}" data-price="{{ product.price }}">
+                {{ product.name }} (₹{{ '%.2f'|format(product.price) }}) - {{ product.weight }}g
+              </option>
+            {% endfor %}
+          {% endif %}
+        </select>
+        <button type="button" class="btn btn-primary btn-sm" id="demo-scan-btn" onclick="triggerDemoScan()">
+          <i class="bi bi-upc-scan"></i> Scan Product
+        </button>
+      </div>
+
+      <div class="demo-control-group">
+        <input 
+          type="number" 
+          id="demo-weight-input" 
+          placeholder="Enter weight in grams" 
+          step="1" 
+          min="0"
+          aria-label="Enter simulated weight in grams"
+        >
+        <button type="button" class="btn btn-primary btn-sm" id="demo-weight-btn" onclick="triggerDemoWeight()">
+          <i class="bi bi-send"></i> Send Weight
+        </button>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+<!-- Dashboard Summary Cards (4 Columns) -->
+<div class="dashboard-cards">
+  <!-- Total Products Card -->
+  <div class="card">
+    <div class="card-icon"><i class="bi bi-box-seam"></i></div>
+    <div class="card-content">
+      <div class="card-value"><span id="total-products">0</span></div>
+      <div class="card-label">Total Products</div>
+    </div>
+  </div>
+
+  <!-- Total Weight Card -->
+  <div class="card">
+    <div class="card-icon"><i class="bi bi-speedometer"></i></div>
+    <div class="card-content">
+      <div class="card-value"><span id="total-weight">0g</span></div>
+      <div class="card-label">Total Weight</div>
+    </div>
+  </div>
+
+  <!-- Current Bill Card -->
+  <div class="card">
+    <div class="card-icon"><i class="bi bi-currency-rupee"></i></div>
+    <div class="card-content">
+      <div class="card-value">₹<span id="current-bill">0.00</span></div>
+      <div class="card-label">Current Bill</div>
+    </div>
+  </div>
+
+  <!-- Trolley Status Card -->
+  <div class="card">
+    <div class="card-icon"><i class="bi bi-link-45deg"></i></div>
+    <div class="card-content">
+      <div class="card-value" style="font-size: 1.35rem; display: flex; align-items: center;">
+        <span id="trolley-status">
+          <span class="status-dot status-disconnected"></span>Disconnected
+        </span>
+      </div>
+      <div class="card-label">Trolley Status</div>
+    </div>
+  </div>
+</div>
+
+<!-- Weight Verification Section -->
+<div id="weight-section">
+  <div class="weight-status weight-waiting" id="weight-status-card">
+    <div class="weight-header">
+      <h3><i class="bi bi-speedometer"></i> Weight Verification</h3>
+      <span class="badge badge-info" id="weight-badge">Waiting</span>
+    </div>
+    <div class="weight-metrics">
+      <div class="weight-metric-item">
+        <span class="metric-label">Expected Weight</span>
+        <span class="metric-value" id="expected-weight">0g</span>
+      </div>
+      <div class="weight-metric-item">
+        <span class="metric-label">Measured Weight</span>
+        <span class="metric-value" id="measured-weight">0g</span>
+      </div>
+      <div class="weight-metric-item">
+        <span class="metric-label">Difference</span>
+        <span class="metric-value" id="weight-diff">0g</span>
+      </div>
+    </div>
+    <p class="weight-message" id="weight-message">
+      Scale is ready. Place scanned items into the cart to verify weight.
+    </p>
+  </div>
+</div>
+
+<!-- Recently Scanned Products Table -->
+<div class="table-container">
+  <div class="table-header">
+    <h3><i class="bi bi-clock-history"></i> Recently Scanned Products</h3>
+    <a href="/cart" class="btn btn-outline btn-sm">View Full Cart</a>
+  </div>
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Price</th>
+          <th>RFID UID</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody id="recent-scans">
+        <tr id="empty-scans-row">
+          <td colspan="4" class="empty-table-message">No products scanned yet</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Toast notification helper
+  function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    const icon = type === 'success' ? '<i class="bi bi-check-circle-fill" style="color: var(--success); font-size: 1.15rem;"></i>' : (type === 'error' ? '<i class="bi bi-x-circle-fill" style="color: var(--danger); font-size: 1.15rem;"></i>' : '<i class="bi bi-info-circle-fill" style="color: var(--info); font-size: 1.15rem;"></i>');
+    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transition = 'opacity 0.4s ease';
+      setTimeout(() => toast.remove(), 400);
+    }, 4000);
+  }
+
+  // Demo Scan action
+  function triggerDemoScan() {
+    const select = document.getElementById('demo-product-select');
+    if (!select) return;
+    const rfidUid = select.value;
+    if (!rfidUid) {
+      showToast('Please select a product first', 'error');
+      return;
+    }
+
+    const selectedOption = select.options[select.selectedIndex];
+    const weight = selectedOption.getAttribute('data-weight');
+
+    fetch('/api/demo/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rfid_uid: rfidUid })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'success' || data.success) {
+        showToast(data.message || 'Product scanned successfully!', 'success');
+        // Auto-fill demo weight input for convenience
+        const weightInput = document.getElementById('demo-weight-input');
+        if (weightInput && weight) {
+          weightInput.value = weight;
+        }
+        fetchDashboardData();
+      } else {
+        showToast(data.message || 'Failed to scan product', 'error');
+      }
+    })
+    .catch(err => {
+      console.error('Error during demo scan:', err);
+      showToast('Error triggering demo scan', 'error');
+    });
+  }
+
+  // Demo Weight action
+  function triggerDemoWeight() {
+    const input = document.getElementById('demo-weight-input');
+    if (!input || input.value === '') {
+      showToast('Please enter a weight value in grams', 'error');
+      return;
+    }
+
+    const weightVal = parseFloat(input.value);
+
+    fetch('/api/demo/weight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weight: weightVal })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'success' || data.success) {
+        showToast(data.message || `Weight update sent: ${weightVal}g`, 'success');
+        fetchDashboardData();
+      } else {
+        showToast(data.message || 'Failed to send weight', 'error');
+      }
+    })
+    .catch(err => {
+      console.error('Error sending demo weight:', err);
+      showToast('Error sending demo weight', 'error');
+    });
+  }
+
+  // Fetch and update dashboard metrics
+  function fetchDashboardData() {
+    fetch('/api/dashboard-data')
+      .then(response => {
+        if (!response.ok) throw new Error('Network response was not ok');
+        return response.json();
+      })
+      .then(data => {
+        // Update Total Products
+        const totalProductsEl = document.getElementById('total-products');
+        if (totalProductsEl && data.total_products !== undefined) {
+          totalProductsEl.textContent = data.total_products;
+        }
+
+        // Update Total Weight
+        const totalWeightEl = document.getElementById('total-weight');
+        if (totalWeightEl && data.total_weight !== undefined) {
+          totalWeightEl.textContent = `${data.total_weight}g`;
+        }
+
+        // Update Current Bill
+        const currentBillEl = document.getElementById('current-bill');
+        if (currentBillEl && data.current_bill !== undefined) {
+          currentBillEl.textContent = parseFloat(data.current_bill).toFixed(2);
+        }
+
+        // Update Trolley Status
+        const trolleyStatusEl = document.getElementById('trolley-status');
+        if (trolleyStatusEl && data.trolley_status !== undefined) {
+          const isConnected = data.trolley_status === 'connected' || data.trolley_status === true;
+          trolleyStatusEl.innerHTML = `
+            <span class="status-dot ${isConnected ? 'status-connected' : 'status-disconnected'}"></span>
+            ${isConnected ? 'Connected' : 'Disconnected'}
+          `;
+        }
+
+        // Update Weight Verification Section
+        updateWeightSection(data.weight_status);
+
+        // Update Recently Scanned Products Table
+        if (Array.isArray(data.recent_scans)) {
+          updateRecentScans(data.recent_scans);
+        }
+      })
+      .catch(err => {
+        console.warn('Dashboard data poll warning:', err);
+      });
+  }
+
+  function updateWeightSection(weightInfo) {
+    const card = document.getElementById('weight-status-card');
+    const badge = document.getElementById('weight-badge');
+    const expEl = document.getElementById('expected-weight');
+    const measEl = document.getElementById('measured-weight');
+    const diffEl = document.getElementById('weight-diff');
+    const msgEl = document.getElementById('weight-message');
+
+    if (!card || !weightInfo) return;
+
+    const expected = weightInfo.expected || 0;
+    const measured = weightInfo.measured || 0;
+    const diff = Math.abs(measured - expected);
+    const status = weightInfo.status || 'waiting'; // 'verified', 'mismatch', 'waiting'
+
+    if (expEl) expEl.textContent = `${expected}g`;
+    if (measEl) measEl.textContent = `${measured}g`;
+    if (diffEl) diffEl.textContent = `${diff}g`;
+
+    card.className = 'weight-status';
+    if (status === 'verified') {
+      card.classList.add('weight-verified');
+      if (badge) {
+        badge.className = 'badge badge-success';
+        badge.textContent = 'Verified';
+      }
+      if (msgEl) msgEl.textContent = 'Weight match verified! Cart contents are secure.';
+    } else if (status === 'mismatch') {
+      card.classList.add('weight-mismatch');
+      if (badge) {
+        badge.className = 'badge badge-danger';
+        badge.textContent = 'Mismatch';
+      }
+      if (msgEl) msgEl.textContent = 'Warning: Weight discrepancy detected between scanned items and scale.';
+    } else {
+      card.classList.add('weight-waiting');
+      if (badge) {
+        badge.className = 'badge badge-warning';
+        badge.textContent = 'Waiting';
+      }
+      if (msgEl) msgEl.textContent = 'Scale is waiting for weight reading to stabilize.';
+    }
+  }
+
+  function updateRecentScans(scans) {
+    const tbody = document.getElementById('recent-scans');
+    if (!tbody) return;
+
+    if (scans.length === 0) {
+      tbody.innerHTML = `
+        <tr id="empty-scans-row">
+          <td colspan="4" class="empty-table-message">No products scanned yet</td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = scans.map(item => `
+      <tr>
+        <td><strong>${escapeHtml(item.name || item.product_name || 'Unknown')}</strong></td>
+        <td>₹${parseFloat(item.price || 0).toFixed(2)}</td>
+        <td><code>${escapeHtml(item.rfid_uid || '-')}</code></td>
+        <td>${escapeHtml(item.time || item.timestamp || 'Just now')}</td>
+      </tr>
+    `).join('');
+  }
+
+  function escapeHtml(str) {
+    if (typeof str !== 'string') return str;
+    return str.replace(/[&<>"']/g, function(m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+    });
+  }
+
+  // Initial fetch and start 2-second polling interval
+  document.addEventListener('DOMContentLoaded', function() {
+    fetchDashboardData();
+    setInterval(fetchDashboardData, 2000);
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}Products - Smart Trolley{% endblock %}
+
+{% block content %}
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="top-bar-title">
+    <h1>Product Management</h1>
+    <div class="subtitle">Add, update, and delete catalog products and RFID mappings</div>
+  </div>
+  <div class="user-info">
+    <div class="user-badge">
+      <span><i class="bi bi-box-seam"></i></span>
+      <span>Inventory Control</span>
+    </div>
+  </div>
+</div>
+
+<!-- Add Product Form Card -->
+<div class="card" style="display: block; margin-bottom: 30px;">
+  <div style="border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 20px;">
+    <h3 style="font-size: 1.2rem; font-weight: 600; color: var(--text); margin: 0; display: flex; align-items: center; gap: 8px;">
+      <span><i class="bi bi-plus-circle"></i></span>
+      <span>Add New Product</span>
+    </h3>
+  </div>
+
+  <form action="/admin/products/add" method="POST">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+      <!-- Product Name -->
+      <div class="form-group">
+        <label for="add-name">Product Name <span style="color: var(--danger);">*</span></label>
+        <input 
+          type="text" 
+          id="add-name" 
+          name="name" 
+          placeholder="e.g. Fresh Milk 500ml" 
+          required 
+          autocomplete="off"
+        >
+      </div>
+
+      <!-- RFID UID -->
+      <div class="form-group">
+        <label for="add-rfid">RFID UID <span style="color: var(--danger);">*</span></label>
+        <input 
+          type="text" 
+          id="add-rfid" 
+          name="rfid_uid" 
+          placeholder="XX:XX:XX:XX" 
+          required 
+          autocomplete="off"
+        >
+      </div>
+
+      <!-- Price -->
+      <div class="form-group">
+        <label for="add-price">Price (₹) <span style="color: var(--danger);">*</span></label>
+        <input 
+          type="number" 
+          id="add-price" 
+          name="price" 
+          step="0.01" 
+          min="0" 
+          placeholder="e.g. 28.00" 
+          required
+        >
+      </div>
+
+      <!-- Category -->
+      <div class="form-group">
+        <label for="add-category">Category <span style="color: var(--danger);">*</span></label>
+        <select id="add-category" name="category" required>
+          <option value="" disabled selected>-- Select Category --</option>
+          <option value="Dairy">Dairy</option>
+          <option value="Bakery">Bakery</option>
+          <option value="Grains">Grains</option>
+          <option value="Snacks">Snacks</option>
+          <option value="Personal Care">Personal Care</option>
+          <option value="Fruits">Fruits</option>
+          <option value="Beverages">Beverages</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+
+      <!-- Expected Weight -->
+      <div class="form-group" style="grid-column: 1 / -1;">
+        <label for="add-weight">Expected Weight in grams (g) <span style="color: var(--danger);">*</span></label>
+        <input 
+          type="number" 
+          id="add-weight" 
+          name="weight" 
+          step="0.1" 
+          min="0" 
+          placeholder="e.g. 530.0" 
+          required
+        >
+      </div>
+    </div>
+
+    <div style="margin-top: 8px;">
+      <button type="submit" class="btn btn-primary">
+        <span><i class="bi bi-plus-circle"></i></span>
+        <span>Add Product</span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Products Table Container -->
+<div class="table-container">
+  <div class="table-header">
+    <h3>
+      <span>All Products</span>
+      <span class="badge badge-info">{{ products|length if products else 0 }}</span>
+    </h3>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 50px;">#</th>
+          <th>Name</th>
+          <th>RFID UID</th>
+          <th>Price (₹)</th>
+          <th>Category</th>
+          <th>Weight (g)</th>
+          <th style="text-align: center; width: 180px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if products and products|length > 0 %}
+          {% for product in products %}
+            <tr>
+              <td><strong>{{ loop.index }}</strong></td>
+              <td><strong>{{ product.name }}</strong></td>
+              <td><code>{{ product.rfid_uid }}</code></td>
+              <td>₹{{ '%.2f'|format(product.price) }}</td>
+              <td>
+                <span class="badge badge-info">{{ product.category }}</span>
+              </td>
+              <td>{{ product.weight }}g</td>
+              <td style="text-align: center;">
+                <div style="display: inline-flex; gap: 8px;">
+                  <button 
+                    type="button" 
+                    class="btn btn-primary btn-sm"
+                    onclick="openEditModal({{ product.id }}, {{ product.name|tojson }}, {{ product.rfid_uid|tojson }}, {{ product.price }}, {{ product.category|tojson }}, {{ product.weight }})"
+                    title="Edit Product"
+                  >
+                    <i class="bi bi-pencil-square"></i> Edit
+                  </button>
+                  <form 
+                    action="/admin/products/delete/{{ product.id }}" 
+                    method="POST" 
+                    style="display: inline;" 
+                    onsubmit="return confirmDelete({{ product.name|tojson }});"
+                  >
+                    <button type="submit" class="btn btn-danger btn-sm" title="Delete Product">
+                      <i class="bi bi-trash"></i> Delete
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="7" class="empty-table-message">
+              No products found in catalog. Add your first product using the form above.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Edit Product Modal -->
+<div class="modal-overlay hidden" id="edit-modal">
+  <div class="modal" style="max-width: 600px; width: 92%;">
+    <h2>Edit Product</h2>
+    <form id="edit-product-form" action="" method="POST">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">
+        <!-- Edit Product Name -->
+        <div class="form-group">
+          <label for="edit-name">Product Name <span style="color: var(--danger);">*</span></label>
+          <input type="text" id="edit-name" name="name" required autocomplete="off">
+        </div>
+
+        <!-- Edit RFID UID -->
+        <div class="form-group">
+          <label for="edit-rfid">RFID UID <span style="color: var(--danger);">*</span></label>
+          <input type="text" id="edit-rfid" name="rfid_uid" placeholder="XX:XX:XX:XX" required autocomplete="off">
+        </div>
+
+        <!-- Edit Price -->
+        <div class="form-group">
+          <label for="edit-price">Price (₹) <span style="color: var(--danger);">*</span></label>
+          <input type="number" id="edit-price" name="price" step="0.01" min="0" required>
+        </div>
+
+        <!-- Edit Category -->
+        <div class="form-group">
+          <label for="edit-category">Category <span style="color: var(--danger);">*</span></label>
+          <select id="edit-category" name="category" required>
+            <option value="Dairy">Dairy</option>
+            <option value="Bakery">Bakery</option>
+            <option value="Grains">Grains</option>
+            <option value="Snacks">Snacks</option>
+            <option value="Personal Care">Personal Care</option>
+            <option value="Fruits">Fruits</option>
+            <option value="Beverages">Beverages</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <!-- Edit Expected Weight -->
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="edit-weight">Expected Weight in grams (g) <span style="color: var(--danger);">*</span></label>
+          <input type="number" id="edit-weight" name="weight" step="0.1" min="0" required>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Open Edit Modal with pre-filled product attributes
+  function openEditModal(id, name, rfid, price, category, weight) {
+    const form = document.getElementById('edit-product-form');
+    if (form) {
+      form.action = `/admin/products/update/${id}`;
+    }
+    const nameInput = document.getElementById('edit-name');
+    const rfidInput = document.getElementById('edit-rfid');
+    const priceInput = document.getElementById('edit-price');
+    const categorySelect = document.getElementById('edit-category');
+    const weightInput = document.getElementById('edit-weight');
+
+    if (nameInput) nameInput.value = name || '';
+    if (rfidInput) rfidInput.value = rfid || '';
+    if (priceInput) priceInput.value = price !== undefined ? price : '';
+    if (categorySelect) categorySelect.value = category || 'Other';
+    if (weightInput) weightInput.value = weight !== undefined ? weight : '';
+
+    const modal = document.getElementById('edit-modal');
+    if (modal) {
+      modal.classList.remove('hidden');
+    }
+  }
+
+  // Close Edit Modal
+  function closeEditModal() {
+    const modal = document.getElementById('edit-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+  }
+
+  // Confirm product deletion
+  function confirmDelete(productName) {
+    return confirm(`Are you sure you want to delete "${productName}" from the catalog? This action cannot be undone.`);
+  }
+
+  // Close modal when user clicks outside modal card
+  document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('edit-modal');
+    if (modal) {
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+          closeEditModal();
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}
