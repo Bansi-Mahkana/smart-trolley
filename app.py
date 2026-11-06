@@ -46,17 +46,20 @@ from models import (
 )
 from serial_comm import SerialCommunicator
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # Configure application logging (both console and file)
 import os
 log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app.log')
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(log_file, encoding='utf-8')
-    ]
+    handlers=[logging.FileHandler(log_file, encoding='utf-8')],
+    force=True
 )
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
+logging.getLogger('serial_comm').setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Initialize database schema immediately
@@ -98,11 +101,17 @@ else:
 # Shared global state
 last_scan_time = {}  # Format: {rfid_uid: float_timestamp}
 weight_data = {
-    'current': 0,
-    'expected': 0,
+    'current': 0.0,
+    'measured': 0.0,
+    'expected': 0.0,
     'status': 'waiting',
-    'message': ''
+    'message': 'Waiting for RFID scan.'
 }
+# Monotonic timestamp of the most recent accepted RFID scan.
+# The scale is given a short settling period before comparison.
+last_scan_at = None
+WEIGHT_CHECK_DELAY = 3.0  # seconds after scan before checking weight
+
 trolley_status = 'disconnected'
 recent_scans = []  # List of dicts: {product_name, product_price, rfid_uid, timestamp, customer_id}
 _checkout_lock = threading.Lock()
@@ -136,21 +145,95 @@ def admin_required(f):
 # Internal Helper Functions
 # ---------------------------------------------------------------------------
 
+_last_hw_led = None
+_last_weight_status = 'waiting'
+_hardware_error_until = 0.0
+
+
+def _send_hardware_command(command):
+    """Send one command to the Arduino; serial_comm owns the serial port."""
+    try:
+        sender = getattr(serial_comm, 'send_command', None)
+        return bool(sender(command)) if callable(sender) else False
+    except Exception as exc:
+        logger.warning("Hardware command failed: %s", exc)
+        return False
+
+
+def _set_hardware_led(state):
+    """Set exactly one status LED. Avoid retransmitting the same state."""
+    global _last_hw_led
+    state = str(state).lower()
+    if state not in {'red', 'green', 'yellow', 'off'}:
+        return False
+    if state == _last_hw_led:
+        return True
+    sent = _send_hardware_command({"command": "led", "state": state})
+    if sent:
+        _last_hw_led = state
+    return sent
+
+
+def _signal_hardware_error():
+    """Show an error and request a short buzzer pattern once per error event."""
+    global _last_weight_status, _hardware_error_until
+    _hardware_error_until = time.monotonic() + 3.0
+    _set_hardware_led('red')
+    if _last_weight_status != 'mismatch':
+        _send_hardware_command({"command": "buzzer", "action": "beep", "count": 3})
+    _last_weight_status = 'mismatch'
+
+
 def _evaluate_weight():
-    """Recalculates weight verification status based on current and expected readings."""
-    diff = abs(weight_data['current'] - weight_data['expected'])
-    if weight_data['current'] > 0 or weight_data['expected'] > 0:
-        if diff <= Config.WEIGHT_TOLERANCE:
-            weight_data['status'] = 'verified'
-            weight_data['message'] = 'Weight verified'
-        else:
+    """Compare total scale reading with total expected cart weight."""
+    global weight_data, last_scan_at, _last_weight_status, _hardware_error_until
+
+    expected = float(weight_data.get('expected', 0.0) or 0.0)
+    measured = float(weight_data.get('current', 0.0) or 0.0)
+
+    if expected <= 0:
+        if time.monotonic() < _hardware_error_until:
             weight_data['status'] = 'mismatch'
-            weight_data['message'] = (
-                f"Weight mismatch! Expected: {weight_data['expected']}g, Measured: {weight_data['current']}g"
-            )
-    else:
+            weight_data['message'] = 'Hardware or RFID error. Please check and retry.'
+            _set_hardware_led('red')
+            return 'mismatch'
         weight_data['status'] = 'waiting'
-        weight_data['message'] = 'Scale waiting for items.'
+        weight_data['message'] = 'Waiting for RFID scan.'
+        # Keep green after a completed successful checkout until the next scan.
+        if _last_weight_status != 'verified':
+            _last_weight_status = 'waiting'
+            _set_hardware_led('off')
+        return 'waiting'
+
+    if last_scan_at is None or (time.monotonic() - last_scan_at) < WEIGHT_CHECK_DELAY:
+        weight_data['status'] = 'checking'
+        weight_data['message'] = 'Place the scanned item on the trolley scale.'
+        _last_weight_status = 'checking'
+        _set_hardware_led('yellow')
+        return 'checking'
+
+    tolerance = float(getattr(Config, 'WEIGHT_TOLERANCE', 10.0))
+    difference = abs(measured - expected)
+
+    # A negative value is a sensor/calibration fault, not a valid weight.
+    if measured < 0 or difference > tolerance:
+        weight_data['status'] = 'mismatch'
+        if measured < 0:
+            weight_data['message'] = (
+                f'Negative scale reading ({measured:.2f} g). Check HX711 calibration and wiring.'
+            )
+        else:
+            weight_data['message'] = (
+                f'Weight mismatch! Expected: {expected:.2f} g, Measured: {measured:.2f} g'
+            )
+        _signal_hardware_error()
+    else:
+        weight_data['status'] = 'verified'
+        weight_data['message'] = 'Weight verified successfully.'
+        _set_hardware_led('green')
+        _last_weight_status = 'verified'
+
+    return weight_data['status']
 
 
 def _handle_scan(uid, customer_id=None):
@@ -165,13 +248,14 @@ def _handle_scan(uid, customer_id=None):
     7. Update expected weight
     8. Return JSON payload
     """
-    global weight_data, recent_scans, last_scan_time
+    global weight_data, recent_scans, last_scan_time, last_scan_at, _last_weight_status
 
     uid = str(uid).strip()
     now = time.time()
 
     # 1. Check duplicate: if scanned within SCAN_COOLDOWN seconds
     if uid in last_scan_time and (now - last_scan_time[uid]) < Config.SCAN_COOLDOWN:
+        _signal_hardware_error()
         return jsonify({
             'success': False,
             'status': 'error',
@@ -183,6 +267,7 @@ def _handle_scan(uid, customer_id=None):
 
     # 3. If not found, return error
     if not product:
+        _signal_hardware_error()
         return jsonify({
             'success': False,
             'status': 'error',
@@ -197,6 +282,7 @@ def _handle_scan(uid, customer_id=None):
         if all_customers:
             customer_id = all_customers[0]['id']
         else:
+            _signal_hardware_error()
             return jsonify({
                 'success': False,
                 'status': 'error',
@@ -231,10 +317,33 @@ def _handle_scan(uid, customer_id=None):
             if excess_scan in recent_scans:
                 recent_scans.remove(excess_scan)
 
-    # 7. Update expected weight
+    # 7. Update expected weight and begin a new item-verification cycle.
     product_weight = float(product.get('weight', 0.0) or 0.0)
-    weight_data['expected'] = round(weight_data['expected'] + product_weight, 2)
-    _evaluate_weight()
+    weight_data['expected'] = round(
+        float(weight_data.get('expected', 0.0)) + product_weight, 2
+    )
+    last_scan_at = time.monotonic()
+    weight_data['status'] = 'checking'
+    weight_data['message'] = 'Item scanned. Place it on the trolley scale.'
+    _last_weight_status = 'checking'
+    _set_hardware_led('yellow')
+    # Open the gate and show the actual database product details on the OLED.
+    servo_sent = _send_hardware_command({"command": "servo", "action": "open"})
+    display_sent = _send_hardware_command({
+        "command": "display",
+        "name": str(product.get('name', 'Product')),
+        "weight": product_weight,
+        "price": float(product.get('price', 0.0) or 0.0)
+    })
+    if not servo_sent:
+        logger.warning("Servo open command could not be sent to Arduino")
+    if not display_sent:
+        logger.warning("Product display command could not be sent to Arduino")
+
+    logger.info(
+        "RFID product added: %s; product weight=%.2f g; expected total=%.2f g",
+        product['name'], product_weight, weight_data['expected']
+    )
 
     # 8. Return success response
     return jsonify({
@@ -248,13 +357,7 @@ def _handle_scan(uid, customer_id=None):
 
 
 def _handle_weight(value):
-    """
-    Core business logic for handling weight measurements:
-    1. Store value in weight_data['current']
-    2. Compare with weight_data['expected'] using WEIGHT_TOLERANCE
-    3. Update status & message
-    4. Return JSON response
-    """
+    """Store a scale reading and update the hardware/dashboard verification state."""
     global weight_data
 
     try:
@@ -266,22 +369,21 @@ def _handle_weight(value):
             'message': 'Invalid weight measurement format'
         }), 400
 
+    if not (float('-inf') < val_float < float('inf')):
+        return jsonify({
+            'success': False,
+            'status': 'error',
+            'message': 'Weight measurement must be a finite number'
+        }), 400
+
     weight_data['current'] = round(val_float, 2)
     weight_data['measured'] = weight_data['current']
 
-    diff = abs(weight_data['current'] - weight_data['expected'])
-    if diff <= Config.WEIGHT_TOLERANCE:
-        weight_data['status'] = 'verified'
-        weight_data['message'] = 'Weight verified'
-    else:
-        weight_data['status'] = 'mismatch'
-        weight_data['message'] = (
-            f"Weight mismatch! Expected: {weight_data['expected']}g, Measured: {weight_data['current']}g"
-        )
+    result = _evaluate_weight()
 
     return jsonify({
         'success': True,
-        'status': 'success',
+        'status': result,
         'message': weight_data['message'],
         'weight_status': weight_data,
         'data': weight_data
@@ -556,10 +658,15 @@ def api_cart_remove():
 
     remove_from_cart(customer_id, product_id)
 
-    # Sync expected weight with updated cart
+    # Sync expected weight with updated cart and re-check the scale.
+    global last_scan_at, _last_weight_status
     summary = get_cart_summary(customer_id)
-    weight_data['expected'] = summary['total_weight']
-    _evaluate_weight()
+    weight_data['expected'] = float(summary['total_weight'] or 0.0)
+    last_scan_at = time.monotonic()
+    _last_weight_status = 'checking' if weight_data['expected'] > 0 else 'waiting'
+    weight_data['status'] = 'checking' if weight_data['expected'] > 0 else 'waiting'
+    weight_data['message'] = 'Cart changed. Rechecking trolley weight.'
+    _set_hardware_led('yellow' if weight_data['expected'] > 0 else 'off')
 
     return jsonify({
         'success': True,
@@ -614,6 +721,7 @@ def api_checkout():
     4. Resets weight scale state & recent scans
     5. Sends email receipt
     """
+    global last_scan_at, _last_weight_status
     customer_id = session['customer_id']
     data = request.get_json(silent=True) or {}
     payment_method = data.get('payment_method', 'Cash')
@@ -628,6 +736,9 @@ def api_checkout():
                 'status': 'error',
                 'message': 'Cannot complete checkout: Cart is empty'
             }), 400
+
+        # Yellow LED indicates payment/checkout is in progress.
+        _set_hardware_led('yellow')
 
         # Build transaction line items
         items = []
@@ -658,10 +769,13 @@ def api_checkout():
         clear_cart(customer_id)
 
         # Reset shared weight tracking and recent scans for this customer
-        weight_data['current'] = 0
-        weight_data['expected'] = 0
+        weight_data['current'] = 0.0
+        weight_data['measured'] = 0.0
+        weight_data['expected'] = 0.0
         weight_data['status'] = 'waiting'
-        weight_data['message'] = ''
+        weight_data['message'] = 'Payment completed. Ready for next customer.'
+        last_scan_at = None
+        _last_weight_status = 'waiting'
         recent_scans[:] = [s for s in recent_scans if s.get('customer_id') != customer_id]
 
     # Attempt sending receipt email outside lock (so email timeout does not block checkout)
@@ -679,6 +793,9 @@ def api_checkout():
         except Exception as e:
             logger.error("Failed to send receipt email: %s", e)
             email_sent = False
+
+    _set_hardware_led('green')
+    _last_weight_status = 'verified'
 
     return jsonify({
         'success': True,
@@ -877,4 +994,11 @@ def admin_transaction_items(id):
 # ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=Config.PORT, debug=True)
+    print(f"Smart Trolley server running on port {Config.PORT}")
+    app.run(
+        host='0.0.0.0',
+        port=Config.PORT,
+        debug=False,
+        use_reloader=False,
+        threaded=True
+    )

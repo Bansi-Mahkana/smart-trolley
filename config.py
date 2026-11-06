@@ -22,9 +22,9 @@ class Config:
     # Email settings (Gmail SMTP)
     SMTP_SERVER = 'smtp.gmail.com'
     SMTP_PORT = 587
-    SMTP_USERNAME = os.environ.get('SMTP_USERNAME', '')
-    SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')  # App password for Gmail
-    SMTP_FROM_EMAIL = os.environ.get('SMTP_FROM_EMAIL', 'smarttrolley@gmail.com')
+    SMTP_USERNAME = os.environ.get('SMTP_USERNAME')
+    SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD')
+    SMTP_FROM_EMAIL = os.environ.get('SMTP_FROM_EMAIL')
 
     # Duplicate scan prevention (seconds)
     SCAN_COOLDOWN = 3
